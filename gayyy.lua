@@ -187,33 +187,10 @@ local function main()
     -- ════════════════════════════════════════════════
     --   PASTE YOUR MAIN SCRIPT BELOW THIS LINE
     -- ════════════════════════════════════════════════
--- 🌊 Auto Join Marine Team in Blox Fruits
-repeat wait() until game:IsLoaded()
-
-local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local player = Players.LocalPlayer
-
--- Hàm để join team Marine
-local function joinMarine()
-    local remotes = ReplicatedStorage:WaitForChild("Remotes")
-    local chooseTeam = remotes:WaitForChild("CommF_")
-    -- "Pirates" là tên team cần join
-    chooseTeam:InvokeServer("SetTeam", "Pirates")
-    chooseTeam:InvokeServer("SetTeam", "Pirates") -- Gọi 2 lần để chắc chắn join thành công
+while true do
+    print("ok")
+    wait(2) -- lặp lại mỗi 2 giây
 end
-
--- Gọi hàm join khi player spawn
-player.CharacterAdded:Connect(function()
-    task.delay(1, joinMarine)
-end)
-
--- Nếu player chưa có character (mới vào game)
-if player.Character then
-    task.delay(1, joinMarine)
-end
-
-print("[✅] Auto join team Marine đã kích hoạt!")
     -- ════════════════════════════════════════════════
 end
 
