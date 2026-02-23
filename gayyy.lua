@@ -1,145 +1,188 @@
--- ╔══════════════════════════════════════════════╗
--- ║         MTRCHILL - KEY SYSTEM v1.0          ║
--- ╚══════════════════════════════════════════════╝
-
 -- ── CONFIG ───────────────────────────────────────────
-script_key = script_key or "";
-
+script_key    = script_key or "";
 local API_URL    = "https://mtrchill.top/api/verify_key.php"
 local API_SECRET = "A7xQ9mL2vR8kT1zW5pN3cY6uH4eJ0bFs"
+local DISCORD    = "discord.gg/myserver"  -- << ĐỔI LINK SERVER
+local HEARTBEAT_INTERVAL = 30             -- giây gửi heartbeat 1 lần
+local TAB_TIMEOUT        = 60             -- giây không heartbeat = xóa tab
 -- ─────────────────────────────────────────────────────
 
-local HttpService = game:GetService("HttpService")
-local Players     = game:GetService("Players")
-local player      = Players.LocalPlayer
+local HttpService   = game:GetService("HttpService")
+local Players       = game:GetService("Players")
+local RunService    = game:GetService("RunService")
+local player        = Players.LocalPlayer
 
 -- ── Logger ───────────────────────────────────────────
 local function log(msg)
     print("[mtrchill] " .. msg)
 end
 
--- ── HWID ─────────────────────────────────────────────
-local function get_hwid()
-    -- Lấy executor HWID nếu có (hỗ trợ Synapse X, KRNL, Fluxus...)
-    local ok, hwid = pcall(function()
-        return game:GetService("RbxAnalyticsService"):GetClientId()
-    end)
-    if ok and hwid and hwid ~= "" then
-        return tostring(hwid)
-    end
-    return tostring(player.UserId)
+-- ── Kick ─────────────────────────────────────────────
+local function kick(msg)
+    player:Kick("\n" .. msg)
 end
 
--- ── Verify Key qua API ───────────────────────────────
-local function verify_key(key)
-    log("check key")
-
-    if key == nil or key == "" then
-        log("ERROR - key is empty, fill in script_key")
-        return false
+-- ── HWID (tự chọn cái tốt nhất) ──────────────────────
+local function get_hwid()
+    -- Ưu tiên 1: syn.fingerprint (Synapse X - hardware level)
+    if syn and syn.fingerprint then
+        local ok, v = pcall(syn.fingerprint)
+        if ok and v and v ~= "" then return "SYN-" .. tostring(v) end
     end
 
-    local body = HttpService:JSONEncode({
-        key_code = key,
-        hwid     = get_hwid(),
-        action   = "open",
-    })
+    -- Ưu tiên 2: KRNL/Fluxus identifyexecutor + ClientId
+    local executor = "UNK"
+    if identifyexecutor then
+        local ok, v = pcall(identifyexecutor)
+        if ok and v then executor = tostring(v):sub(1,3):upper() end
+    end
 
+    -- Ưu tiên 3: RbxAnalyticsService ClientId (per-device, stable)
+    local ok, clientId = pcall(function()
+        return game:GetService("RbxAnalyticsService"):GetClientId()
+    end)
+    if ok and clientId and clientId ~= "" then
+        return executor .. "-" .. tostring(clientId)
+    end
+
+    -- Fallback: UserId (per-account, không lý tưởng nhưng vẫn dùng được)
+    return "USR-" .. tostring(player.UserId)
+end
+
+-- ── HTTP Request wrapper ──────────────────────────────
+local function http_request(url, method, headers, body)
     local ok, response = pcall(function()
         if syn and syn.request then
-            return syn.request({
-                Url     = API_URL,
-                Method  = "POST",
-                Headers = {
-                    ["Content-Type"] = "application/json",
-                    ["X-API-Secret"] = API_SECRET,
-                },
-                Body    = body,
-            })
+            return syn.request({ Url=url, Method=method, Headers=headers, Body=body })
         elseif http and http.request then
-            return http.request({
-                Url     = API_URL,
-                Method  = "POST",
-                Headers = {
-                    ["Content-Type"] = "application/json",
-                    ["X-API-Secret"] = API_SECRET,
-                },
-                Body    = body,
-            })
+            return http.request({ Url=url, Method=method, Headers=headers, Body=body })
         elseif request then
-            return request({
-                Url     = API_URL,
-                Method  = "POST",
-                Headers = {
-                    ["Content-Type"] = "application/json",
-                    ["X-API-Secret"] = API_SECRET,
-                },
-                Body    = body,
-            })
+            return request({ Url=url, Method=method, Headers=headers, Body=body })
         else
-            error("No HTTP executor function found")
+            error("No HTTP function found")
         end
     end)
+    if not ok then return nil, tostring(response) end
+    return response, nil
+end
 
-    if not ok then
-        log("ERROR - cannot reach API: " .. tostring(response))
-        return false
+-- ── Gọi API ───────────────────────────────────────────
+local function call_api(action, key_code, hwid)
+    local body = HttpService:JSONEncode({
+        key_code = key_code,
+        hwid     = hwid,
+        action   = action,
+    })
+    local headers = {
+        ["Content-Type"] = "application/json",
+        ["X-API-Secret"] = API_SECRET,
+    }
+    local response, err = http_request(API_URL, "POST", headers, body)
+    if not response then
+        return nil, "Cannot reach API: " .. (err or "unknown")
     end
-
-    -- Parse response body
     local data
-    local parse_ok = pcall(function()
+    local ok = pcall(function()
         local raw = type(response) == "table" and response.Body or tostring(response)
         data = HttpService:JSONDecode(raw)
     end)
-
-    if not parse_ok or not data then
-        log("ERROR - invalid API response")
-        return false
+    if not ok or not data then
+        return nil, "Invalid API response"
     end
-
-    if data.success then
-        log("key valid")
-        return true, data
-    else
-        log("INVALID - " .. (data.message or "unknown error"))
-        return false
-    end
-end
-
--- ── Check tab ────────────────────────────────────────
-local function check_tab(data)
-    log("check tab execute")
-
-    if data then
-        local used  = tostring(data.tab_used  or "?")
-        local limit = tostring(data.tab_limit or "?")
-        log("valid (" .. used .. "/" .. limit .. " tabs)")
-    else
-        log("valid")
-    end
-
-    return true
+    return data, nil
 end
 
 -- ── Main ─────────────────────────────────────────────
 local function main()
-    local valid, data = verify_key(script_key)
+    local hwid = get_hwid()
 
-    if not valid then
-        log("key verification failed - script stopped")
-        log("get key at discord: discord.gg/yourserver")
+    -- ── Bước 1: Verify key ──
+    log("check key")
+
+    if script_key == nil or script_key == "" then
+        log("ERROR - key is empty")
+        kick("You Dont Have Keys Or Key Invalid\nJoin " .. DISCORD)
         return
     end
 
-    local tab_ok = check_tab(data)
+    local data, err = call_api("open", script_key, hwid)
 
-    if not tab_ok then
-        log("tab check failed - script stopped")
+    if not data then
+        log("ERROR - " .. (err or "unknown"))
+        kick("You Dont Have Keys Or Key Invalid\nJoin " .. DISCORD)
         return
     end
 
+    -- ── Bước 2: Xử lý kết quả ──
+    if not data.success then
+        local msg = data.message or ""
+
+        if msg:lower():find("expired") then
+            log("INVALID - key expired")
+            kick("Your Keys Expired\nJoin " .. DISCORD)
+
+        elseif msg:lower():find("blacklist") then
+            log("INVALID - key blacklisted")
+            kick("Your Keys Blacklists\nJoin " .. DISCORD)
+
+        elseif msg:lower():find("banned") then
+            log("INVALID - account banned")
+            kick("Your Account Has Been Banned\nJoin " .. DISCORD)
+
+        elseif msg:lower():find("tab limit") then
+            log("INVALID - tab limit reached")
+            kick("Tab Limit Reached (" .. tostring(data.tab_used or "?") .. "/" .. tostring(data.tab_limit or "?") .. ")\nClose other Roblox instances")
+
+        elseif msg:lower():find("hwid") then
+            log("INVALID - HWID mismatch")
+            kick("HWID Mismatch - Key locked to another device\nJoin " .. DISCORD)
+
+        else
+            log("INVALID - " .. msg)
+            kick("You Dont Have Keys Or Key Invalid\nJoin " .. DISCORD)
+        end
+        return
+    end
+
+    -- ── Bước 3: Key hợp lệ ──
+    log("key valid")
+
+    local used  = tostring(data.tab_used  or "?")
+    local limit = tostring(data.tab_limit or "?")
+    log("check tab execute")
+    log("valid (" .. used .. "/" .. limit .. " tabs)")
     log("done verify keys - execute script")
+
+    -- ── Bước 4: Heartbeat (giữ tab alive, tự xóa sau TAB_TIMEOUT giây) ──
+    local heartbeat_running = true
+    local heartbeat_conn
+
+    heartbeat_conn = RunService.Heartbeat:Connect(function() end) -- placeholder
+    heartbeat_conn:Disconnect()
+
+    task.spawn(function()
+        while heartbeat_running do
+            task.wait(HEARTBEAT_INTERVAL)
+            if not heartbeat_running then break end
+            local hb_data, hb_err = call_api("heartbeat", script_key, hwid)
+            if not hb_data or not hb_data.success then
+                log("heartbeat failed - " .. (hb_err or (hb_data and hb_data.message) or "unknown"))
+            end
+        end
+    end)
+
+    -- Cleanup khi player leave
+    Players.PlayerRemoving:Connect(function(p)
+        if p == player then
+            heartbeat_running = false
+            call_api("close", script_key, hwid)
+        end
+    end)
+
+    game:BindToClose(function()
+        heartbeat_running = false
+        call_api("close", script_key, hwid)
+    end)
 
     -- ════════════════════════════════════════════════
     --   PASTE YOUR MAIN SCRIPT BELOW THIS LINE
@@ -170,7 +213,7 @@ if player.Character then
     task.delay(1, joinMarine)
 end
 
-print("[✅] Auto join team Marine đã kích hoạt!") 
+print("[✅] Auto join team Marine đã kích hoạt!")
     -- ════════════════════════════════════════════════
 end
 
