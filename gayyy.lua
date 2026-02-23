@@ -3,7 +3,7 @@
 -- ╚══════════════════════════════════════════════╝
 
 -- ── CONFIG ───────────────────────────────────────────
-script_key = script_key or ""
+script_key = script_key or "";
 
 local API_URL    = "https://mtrchill.top/api/verify_key.php"
 local API_SECRET = "A7xQ9mL2vR8kT1zW5pN3cY6uH4eJ0bFs"
