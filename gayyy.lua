@@ -1,5 +1,9 @@
+-- ╔══════════════════════════════════════════════╗
+-- ║         MTRCHILL - KEY SYSTEM v1.0          ║
+-- ╚══════════════════════════════════════════════╝
+
 -- ── CONFIG ───────────────────────────────────────────
-script_key    = script_key or "";
+script_key    = script_key or ""
 local API_URL    = "https://mtrchill.top/api/verify_key.php"
 local API_SECRET = "A7xQ9mL2vR8kT1zW5pN3cY6uH4eJ0bFs"
 local DISCORD    = "discord.gg/myserver"  -- << ĐỔI LINK SERVER
@@ -179,16 +183,12 @@ local function main()
         end
     end)
 
-    game:BindToClose(function()
-        heartbeat_running = false
-        call_api("close", script_key, hwid)
-    end)
 
     -- ════════════════════════════════════════════════
     --   PASTE YOUR MAIN SCRIPT BELOW THIS LINE
     -- ════════════════════════════════════════════════
 while true do
-    print("ok")
+    print("hello")
     wait(2) -- lặp lại mỗi 2 giây
 end
     -- ════════════════════════════════════════════════
