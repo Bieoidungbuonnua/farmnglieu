@@ -11,9 +11,9 @@ local lp          = Players.LocalPlayer
 
 -- ── Config (thay 4 dòng này) ─────────────────────────────────────────────────
 local API_HOST   = "http://stardust.pikamc.vn:25765"
-local API_KEY    = "K9v@Tz4#LmP2x!Q8r$WsY7&bN3e*Hj6^UcD1fG"
-local API_SECRET = "mR7!aZ2$Xc9^Lp4@Vt8#Qw6&En3*By5HuK1dJ"
-local DISCORD    = "discord.gg/testing"
+local API_KEY    = "testapikeyyyyyydasd"
+local API_SECRET = "testapikeyy32asdt23daa"
+local DISCORD    = "discord.gg/yourserver"
 local HB_TICK    = 25
 
 -- ── Logger ────────────────────────────────────────────────────────────────────
@@ -101,7 +101,6 @@ end
 
 local function getHwid()
     local exec = getExecutor()
-    log("[ EXEC ] " .. exec)
     local base = ""
     if exec:lower():find("synapse") and syn and syn.fingerprint then
         local ok, v = pcall(syn.fingerprint)
@@ -130,10 +129,10 @@ end
 -- POST JSON với x-api-key + x-signature
 local function apiPost(endpoint, body, keyForSig)
     local fn = getReqFn()
-    if not fn then log("[ ERR ] Không có http function"); return nil end
+    if not fn then log("[ ERR ] No HTTP function"); return nil end
 
     local ok_enc, bodyStr = pcall(function() return HttpService:JSONEncode(body) end)
-    if not ok_enc then log("[ ERR ] JSON encode thất bại"); return nil end
+    if not ok_enc then log("[ ERR ] JSON encode Error"); return nil end
 
     -- Tính HMAC signature từ key (giống web.js: .update(key).digest("hex"))
     local sig = keyForSig and hmacSha256(API_SECRET, keyForSig) or nil
@@ -150,31 +149,30 @@ local function apiPost(endpoint, body, keyForSig)
         Headers = headers,
         Body    = bodyStr,
     })
-    if not ok then log("[ ERR ] Request thất bại: " .. tostring(res)); return nil end
+    if not ok then log("[ ERR ] Request Error: " .. tostring(res)); return nil end
 
     local raw  = type(res) == "table" and (res.Body or res.body) or tostring(res)
     local ok2, data = pcall(function() return HttpService:JSONDecode(raw) end)
-    if not ok2 then log("[ ERR ] JSON decode thất bại: " .. tostring(raw):sub(1,80)); return nil end
+    if not ok2 then log("[ ERR ] JSON decode Error: " .. tostring(raw):sub(1,80)); return nil end
     return data
 end
 
 -- ── Verify ────────────────────────────────────────────────────────────────────
 local function verify(key)
-    log("[ 1/4 ] Kiểm tra key...")
+    log("[ 1/4 ] Verify key...")
     if not key or key == "" then
-        kick("Bạn chưa có key!\nDùng /redeem trong Discord."); return false
+        kick("Your Key Invalid or Not exist!\nBuy Keys in Discord."); return false
     end
 
-    log("[ 2/4 ] Lấy HWID...")
+    log("[ 2/4 ] Get HWID...")
     local hwid = getHwid()
-    log("[ HWID ] " .. hwid)
 
-    log("[ 3/4 ] Xác thực với server...")
+    log("[ 3/4 ] Authenticate with the server....")
     -- Gọi consume-tab (POST JSON, signature = HMAC của key_code)
     local data = apiPost("/api/consume-tab", { key_code = key, hwid = hwid }, key)
 
     if not data then
-        kick("Không thể kết nối server. Thử lại sau."); return false
+        kick("Unable to connect to the server. Please try again later."); return false
     end
 
     if not data.success then
@@ -182,20 +180,20 @@ local function verify(key)
         local err  = tostring(data.error or data.msg or ""):lower()
         log("[ ERR ] code=" .. code .. " err=" .. err)
 
-        if     code == "expired"      or err:find("expir")      then kick("Key Đã Hết Hạn!")
-        elseif code == "blacklisted"  or err:find("blacklist")  then kick("Key Đã Bị Blacklist!\nLiên hệ Admin.")
-        elseif code == "banned"       or err:find("ban")        then kick("Tài Khoản Đã Bị Ban!")
+        if     code == "expired"      or err:find("expir")      then kick("Key Has Been Expired!")
+        elseif code == "blacklisted"  or err:find("blacklist")  then kick("Key Has Been Blacklist!\Ask Admin.")
+        elseif code == "banned"       or err:find("ban")        then kick("Your Keys Banned!")
         elseif code == "tab_limit"    or err:find("tab")        then
-            kick("Đã Đạt Giới Hạn Tab!\n("..tostring(data.tab_used or "?").."/"..tostring(data.tab_limit or "?")..")\nĐóng Roblox ở thiết bị khác.")
-        elseif code == "not_found"    or err:find("not found")  then kick("Key Không Tồn Tại!")
-        elseif code == "not_redeemed" or err:find("not redeem") then kick("Key Chưa Kích Hoạt!\nDùng /redeem trong Discord.")
-        else kick("Key Không Hợp Lệ!") end
+            kick("Has Limit Tab!\n("..tostring(data.tab_used or "?").."/"..tostring(data.tab_limit or "?")..")\nClose Roblox.")
+        elseif code == "not_found"    or err:find("not found")  then kick("Key Does Not Exist!")
+        elseif code == "not_redeemed" or err:find("not redeem") then kick("Key Not Redeem!\nUse /redeem in Discord.")
+        else kick("Key Invalid!") end
         return false
     end
 
     local tabLbl = (data.tab_limit == 0) and "∞" or tostring(data.tab_limit or "?")
     log("[ 4/4 ] Tab: " .. tostring(data.tab_used or "?") .. "/" .. tabLbl)
-    log("[ DONE ] ✅ Key hợp lệ!")
+    log("[ DONE ] ✅ Key Valid!")
     return true, hwid
 end
 
@@ -223,14 +221,6 @@ local function main()
             apiPost("/api/reset-tab", { key_code = keySnap }, keySnap)
         end
     end)
-
-    -- Xóa thông tin nhạy cảm
-    task.delay(1, function()
-        API_KEY    = nil
-        API_SECRET = nil
-        script_key = nil
-    end)
-
     -- ════════════════════════════════════════
     --   PASTE MAIN SCRIPT CỦA BẠN VÀO ĐÂY
     -- ════════════════════════════════════════
