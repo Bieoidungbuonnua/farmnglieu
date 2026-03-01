@@ -1,26 +1,25 @@
 -- ╔══════════════════════════════════════════════════════╗
 -- ║         MTRCHILL KEY SYSTEM v4.0 - Lua Client       ║
--- ║  Auth: x-api-key + x-signature (HMAC-SHA256)        ║
 -- ╚══════════════════════════════════════════════════════╝
 
 script_key = script_key or "";
--- ── Services ──────────────────────────────────────────────────────────────────
+
 local Players     = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
 local lp          = Players.LocalPlayer
 
--- ── Config (thay 4 dòng này) ─────────────────────────────────────────────────
+-- ── Config ────────────────────────────────────────────────────────────────────
 local API_HOST   = "http://stardust.pikamc.vn:25765"
 local API_KEY    = "testapikeyyyyyydasd"
 local API_SECRET = "testapikeyy32asdt23daa"
 local DISCORD    = "discord.gg/yourserver"
-local HB_TICK    = 25
+local HB_TICK    = 2   -- heartbeat mỗi 2 giây
 
--- ── Logger ────────────────────────────────────────────────────────────────────
+-- ── Logger & Kick ─────────────────────────────────────────────────────────────
 local function log(m) print("[keysystem] " .. tostring(m)) end
 local function kick(msg) lp:Kick("\n❌ " .. msg .. "\n\nDiscord: " .. DISCORD) end
 
--- ── HMAC-SHA256 (pure Lua, giống code web.js dùng crypto.createHmac) ─────────
+-- ── HMAC-SHA256 ───────────────────────────────────────────────────────────────
 local bit  = bit32 or (bit and bit) or require("bit")
 local band, bxor, rshift, lshift = bit.band, bit.bxor, bit.rshift, bit.lshift
 
@@ -80,10 +79,8 @@ local function sha256(msg)
     return r
 end
 
--- HMAC-SHA256: giống crypto.createHmac("sha256", secret).update(message).digest("hex")
 local function hmacSha256(secret, message)
     if #secret > 64 then secret = sha256(secret) end
-    -- convert hex secret to bytes nếu cần
     secret = secret .. string.rep("\0", 64 - #secret)
     local opad = secret:gsub(".", function(c) return string.char(bxor(c:byte(), 0x5c)) end)
     local ipad = secret:gsub(".", function(c) return string.char(bxor(c:byte(), 0x36)) end)
@@ -116,7 +113,7 @@ local function getHwid()
     return base .. "_" .. tostring(lp.UserId):sub(-4)
 end
 
--- ── HTTP helper ───────────────────────────────────────────────────────────────
+-- ── HTTP POST ─────────────────────────────────────────────────────────────────
 local _reqFn = nil
 local function getReqFn()
     if _reqFn then return _reqFn end
@@ -126,22 +123,19 @@ local function getReqFn()
     return nil
 end
 
--- POST JSON với x-api-key + x-signature
-local function apiPost(endpoint, body, keyForSig)
+local function apiPost(endpoint, body, silent)
     local fn = getReqFn()
-    if not fn then log("[ ERR ] No HTTP function"); return nil end
-
+    if not fn then
+        if not silent then log("[ ERR ] Không có http function") end
+        return nil
+    end
     local ok_enc, bodyStr = pcall(function() return HttpService:JSONEncode(body) end)
-    if not ok_enc then log("[ ERR ] JSON encode Error"); return nil end
-
-    -- Tính HMAC signature từ key (giống web.js: .update(key).digest("hex"))
-    local sig = keyForSig and hmacSha256(API_SECRET, keyForSig) or nil
+    if not ok_enc then return nil end
 
     local headers = {
         ["Content-Type"] = "application/json",
         ["x-api-key"]    = API_KEY,
     }
-    if sig then headers["x-signature"] = sig end
 
     local ok, res = pcall(fn, {
         Url     = API_HOST .. endpoint,
@@ -149,51 +143,52 @@ local function apiPost(endpoint, body, keyForSig)
         Headers = headers,
         Body    = bodyStr,
     })
-    if not ok then log("[ ERR ] Request Error: " .. tostring(res)); return nil end
+    if not ok then
+        if not silent then log("[ ERR ] Request Error: " .. tostring(res)) end
+        return nil
+    end
 
     local raw  = type(res) == "table" and (res.Body or res.body) or tostring(res)
     local ok2, data = pcall(function() return HttpService:JSONDecode(raw) end)
-    if not ok2 then log("[ ERR ] JSON decode Error: " .. tostring(raw):sub(1,80)); return nil end
+    if not ok2 then return nil end
     return data
 end
 
 -- ── Verify ────────────────────────────────────────────────────────────────────
 local function verify(key)
-    log("[ 1/4 ] Verify key...")
+    log("[ 1/4 ] Kiểm tra key...")
     if not key or key == "" then
-        kick("Your Key Invalid or Not exist!\nBuy Keys in Discord."); return false
+        kick("Bạn chưa có key!\nDùng /redeem trong Discord."); return false
     end
 
-    log("[ 2/4 ] Get HWID...")
+    log("[ 2/4 ] Lấy HWID...")
     local hwid = getHwid()
 
-    log("[ 3/4 ] Authenticate with the server....")
-    -- Gọi consume-tab (POST JSON, signature = HMAC của key_code)
-    local data = apiPost("/api/consume-tab", { key_code = key, hwid = hwid }, key)
+    log("[ 3/4 ] Xác thực với server...")
+    local data = apiPost("/api/consume-tab", { key_code = key, hwid = hwid })
 
     if not data then
-        kick("Unable to connect to the server. Please try again later."); return false
+        kick("Không thể kết nối server.\nVui lòng thử lại sau."); return false
     end
 
     if not data.success then
         local code = tostring(data.code  or ""):lower()
         local err  = tostring(data.error or data.msg or ""):lower()
-        log("[ ERR ] code=" .. code .. " err=" .. err)
 
-        if     code == "expired"      or err:find("expir")      then kick("Key Has Been Expired!")
-        elseif code == "blacklisted"  or err:find("blacklist")  then kick("Key Has Been Blacklist!\Ask Admin.")
-        elseif code == "banned"       or err:find("ban")        then kick("Your Keys Banned!")
+        if     code == "expired"      or err:find("expir")      then kick("Key Đã Hết Hạn!")
+        elseif code == "blacklisted"  or err:find("blacklist")  then kick("Key Đã Bị Blacklist!\nLiên hệ Admin.")
+        elseif code == "banned"       or err:find("ban")        then kick("Tài Khoản Đã Bị Ban!")
         elseif code == "tab_limit"    or err:find("tab")        then
-            kick("Has Limit Tab!\n("..tostring(data.tab_used or "?").."/"..tostring(data.tab_limit or "?")..")\nClose Roblox.")
-        elseif code == "not_found"    or err:find("not found")  then kick("Key Does Not Exist!")
-        elseif code == "not_redeemed" or err:find("not redeem") then kick("Key Not Redeem!\nUse /redeem in Discord.")
-        else kick("Key Invalid!") end
+            kick("Đã Đạt Giới Hạn Tab!\n("..tostring(data.tab_used or "?").."/"..tostring(data.tab_limit or "?")..")\nĐóng Roblox ở thiết bị khác.")
+        elseif code == "not_found"    or err:find("not found")  then kick("Key Không Tồn Tại!")
+        elseif code == "not_redeemed" or err:find("not redeem") then kick("Key Chưa Kích Hoạt!\nDùng /redeem trong Discord.")
+        else kick("Key Không Hợp Lệ!") end
         return false
     end
 
     local tabLbl = (data.tab_limit == 0) and "∞" or tostring(data.tab_limit or "?")
     log("[ 4/4 ] Tab: " .. tostring(data.tab_used or "?") .. "/" .. tabLbl)
-    log("[ DONE ] ✅ Key Valid!")
+    log("[ DONE ] ✅ Key hợp lệ!")
     return true, hwid
 end
 
@@ -205,12 +200,12 @@ local function main()
     local alive   = true
     local keySnap = script_key
 
-    -- Heartbeat
+    -- Heartbeat mỗi 2 giây (silent, không log lỗi connection)
     task.spawn(function()
         while alive do
             task.wait(HB_TICK)
             if not alive then break end
-            apiPost("/api/consume-tab", { key_code = keySnap, hwid = hwid }, keySnap)
+            apiPost("/api/heartbeat", { key_code = keySnap, hwid = hwid }, true)
         end
     end)
 
@@ -218,13 +213,21 @@ local function main()
     Players.PlayerRemoving:Connect(function(p)
         if p == lp then
             alive = false
-            apiPost("/api/reset-tab", { key_code = keySnap }, keySnap)
+            apiPost("/api/reset-tab", { key_code = keySnap }, true)
         end
     end)
+
+    -- Xóa thông tin nhạy cảm
+    task.delay(1, function()
+        API_KEY    = nil
+        API_SECRET = nil
+        script_key = nil
+    end)
+
     -- ════════════════════════════════════════
     --   PASTE MAIN SCRIPT CỦA BẠN VÀO ĐÂY
     -- ════════════════════════════════════════
-getgenv().Settings = {
+	getgenv().Settings = {
     ["Max Chests"] = 50; -- if you collected 65 chests, hop server
     ["Reset After Collect Chests"] = 14; -- if you collected 10 chests, it will reset for safe (anti kick)
     ["Katakuri Progress"] = 100; -- Auto hop until katakuri monsters progress left than 200
