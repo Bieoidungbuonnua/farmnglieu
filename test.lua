@@ -9,11 +9,11 @@ local HttpService = game:GetService("HttpService")
 local lp          = Players.LocalPlayer
 
 -- ── Config ────────────────────────────────────────────────────────────────────
-local API_HOST   = "http://stardust.pikamc.vn:25765"
-local API_KEY    = "testapikeyyyyyydasd"
-local API_SECRET = "testapikeyy32asdt23daa"
+local API_HOST   = "http://YOUR_VPS_IP:25082"
+local API_KEY    = "key_lo_chia_ne_con"
+local API_SECRET = "ba_vo_bu_key_ne_con"
 local DISCORD    = "discord.gg/yourserver"
-local HB_TICK    = 2   -- heartbeat mỗi 2 giây
+local HB_TICK    = 5   -- heartbeat mỗi 5 giây
 
 -- ── Logger & Kick ─────────────────────────────────────────────────────────────
 local function log(m) print("[keysystem] " .. tostring(m)) end
@@ -155,7 +155,7 @@ local function apiPost(endpoint, body, silent)
 end
 
 -- ── Verify ────────────────────────────────────────────────────────────────────
-local function verify(key)
+local function verify(key, tabId)
     log("[ 1/4 ] Kiểm tra key...")
     if not key or key == "" then
         kick("Bạn chưa có key!\nDùng /redeem trong Discord."); return false
@@ -165,7 +165,7 @@ local function verify(key)
     local hwid = getHwid()
 
     log("[ 3/4 ] Xác thực với server...")
-    local data = apiPost("/api/consume-tab", { key_code = key, hwid = hwid })
+    local data = apiPost("/api/consume-tab", { key_code = key, hwid = hwid, tab_id = tabId })
 
     if not data then
         kick("Không thể kết nối server.\nVui lòng thử lại sau."); return false
@@ -192,28 +192,39 @@ local function verify(key)
     return true, hwid
 end
 
+-- ── Tab ID: unique cho mỗi instance Roblox ──────────────────────────────────
+local function genTabId()
+    -- Kết hợp UserId + tick + random để đảm bảo unique mỗi lần chạy
+    local t   = tostring(math.floor(tick() * 1000))
+    local uid = tostring(lp.UserId)
+    local rnd = tostring(math.random(100000, 999999))
+    return uid .. "_" .. t .. "_" .. rnd
+end
+
 -- ── Main ──────────────────────────────────────────────────────────────────────
 local function main()
-    local ok, hwid = verify(script_key)
+    local TAB_ID = genTabId() -- unique cho tab này, không đổi trong suốt session
+
+    local ok, hwid = verify(script_key, TAB_ID)
     if not ok then return end
 
     local alive   = true
     local keySnap = script_key
 
-    -- Heartbeat mỗi 2 giây (silent, không log lỗi connection)
+    -- Heartbeat mỗi 5 giây, gửi tab_id riêng của tab này
     task.spawn(function()
         while alive do
             task.wait(HB_TICK)
             if not alive then break end
-            apiPost("/api/heartbeat", { key_code = keySnap, hwid = hwid }, true)
+            apiPost("/api/heartbeat", { key_code = keySnap, tab_id = TAB_ID }, true)
         end
     end)
 
-    -- Trả tab khi rời game
+    -- Trả đúng tab này khi rời game
     Players.PlayerRemoving:Connect(function(p)
         if p == lp then
             alive = false
-            apiPost("/api/reset-tab", { key_code = keySnap }, true)
+            apiPost("/api/reset-tab", { key_code = keySnap, tab_id = TAB_ID }, true)
         end
     end)
 
