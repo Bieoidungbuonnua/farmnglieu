@@ -9,7 +9,7 @@ local HttpService = game:GetService("HttpService")
 local lp          = Players.LocalPlayer
 
 -- ── Config ────────────────────────────────────────────────────────────────────
-local API_HOST   = "stardust.pikamc.vn:25765"
+local API_HOST   = "http://stardust.pikamc.vn:25765"
 local API_KEY    = "testapikeyyyyyydasd"
 local API_SECRET = "testapikeyy32asdt23daa"
 local DISCORD    = "discord.gg/yourserver"
@@ -168,7 +168,7 @@ local function verify(key, tabId)
     local data = apiPost("/api/consume-tab", { key_code = key, hwid = hwid, tab_id = tabId })
 
     if not data then
-        kick("Không thể kết nối server.\nVui lòng thử lại sau."); return false
+        kick("Không thể kết nối server.\nServer có thể đang offline.\nThử lại sau 1-2 phút.\nNếu vẫn lỗi liên hệ Admin."); return false
     end
 
     if not data.success then
