@@ -9,9 +9,9 @@ local HttpService = game:GetService("HttpService")
 local lp          = Players.LocalPlayer
 
 -- ── Config ────────────────────────────────────────────────────────────────────
-local API_HOST   = "http://YOUR_VPS_IP:25082"
-local API_KEY    = "key_lo_chia_ne_con"
-local API_SECRET = "ba_vo_bu_key_ne_con"
+local API_HOST   = "stardust.pikamc.vn:25765"
+local API_KEY    = "testapikeyyyyyydasd"
+local API_SECRET = "testapikeyy32asdt23daa"
 local DISCORD    = "discord.gg/yourserver"
 local HB_TICK    = 5   -- heartbeat mỗi 5 giây
 
